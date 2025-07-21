@@ -8,6 +8,9 @@ from typing import List
 import json
 from datetime import datetime
 
+os.environ["HTTP_PROXY"] = "http://127.0.0.1:10809"
+os.environ["HTTPS_PROXY"] = "http://127.0.0.1:10809"
+
 MODEL = "gpt-4o-mini"
 ENC = tiktoken.get_encoding("cl100k_base")
 MAX_INPUT = 3000
@@ -111,7 +114,7 @@ class processer:
         summary = resp.choices[0].message.content.strip()
         return summary
 
-    def process(self, item):
+    def take_item(self, item):
         item_str = json.dumps(item, ensure_ascii=False, indent=2)
         item_tokens = len(ENC.encode(item_str))
 
@@ -189,31 +192,61 @@ class processer:
         socket.close()
         return trans
 
-    def load_data(self, input: str):
-        with open(input, 'r', encoding='utf-8-sig') as f:
-            data = json.load(f)
-        if not isinstance(data, list):
-            raise ValueError("Input data must be a JSON array.")
+    def process(self, input_data: str, output_dir: str = None):
+        from pathlib import Path
 
-        self.orig = data
-        for item in self.orig:
-            self.process(item)
+        with open(input_data, 'r', encoding='utf-8-sig') as f:
+            try:
+                data = json.load(f)
+                if not isinstance(data, list):
+                    raise ValueError("Input data must be a JSON array.")
+                self.orig = data
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Failed to parse JSON from {input_data}: {e}")
 
-        if self.current_tokens > 0:
-            self.request()
+        output_data = Path(output_dir) / f"{Path(input_data).name}.tmp"
+        print("Try to use save: ", output_data)
+        with open(output_data, 'r', encoding='utf-8-sig') as f:
+            try:
+                data = json.load(f)
+                self.trans = data.get("trans", [])
+                self.current_summary = data.get("current_summary", "")
+            except json.JSONDecodeError:
+                print(f"Failed to load existing data from {output_data}, starting fresh.")
+                self.trans = []
+                self.current_summary = ""
 
-    def save_data(self, output: str):
-        with open(output, "w", encoding="utf-8-sig") as f:
-            json.dump(self.trans, f, ensure_ascii=False, indent=2)
+        start = len(self.trans)
+        print(f"Starting from index {start} of {len(self.orig)} items.")
+        try:
+            for item in self.orig[start:]:
+                self.take_item(item)
+            if self.current_tokens > 0:
+                self.request()
+        except Exception as e:
+            print(f"Error during processing: {e}")
+
+        if len(self.orig) != len(self.trans):
+            with open(output_data, "w", encoding="utf-8-sig") as f:
+                save_data = {
+                    "trans": self.trans,
+                    "current_summary": self.current_summary
+                }
+                json.dump(save_data, f, ensure_ascii=False, indent=2)
+                print(f"Save current data to {output_data}")
+        else:
+            trans_out = Path(output_dir) / f"{Path(input_data).name}"
+            with open(trans_out, "w", encoding="utf-8-sig") as f:
+                json.dump(self.trans, f, ensure_ascii=False, indent=2)
+                print(f"Translate completed, all data saved to {trans_out}")
 
 
 if __name__ == '__main__':
     input_data = 'data/orig/00000001.csv.json'
-    output_data = 'data/trans/00000001.csv.json'
+    output_dir = 'data/trans/'
     game_intro_path = 'data/game_intro.txt'
-    api_key = 'data/openai_key'
+    api_key = 'data/api_key/openai.txt'
 
     processor = processer(api_key)
     processor.load_game_introduction(game_intro_path)
-    processor.load_data(input_data)
-    processor.save_data(output_data)
+    processor.process(input_data, output_dir)

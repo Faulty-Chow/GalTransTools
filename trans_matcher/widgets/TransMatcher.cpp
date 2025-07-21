@@ -32,6 +32,9 @@ public:
 
     void setOrigin(const QJsonArray &origin) {
         m_origin = origin;
+        if (rowCount() < m_origin.size()) {
+            setRowCount(m_origin.size());
+        }
         emit dataChanged(index(0, 0),
                          index(rowCount() - 1, 0),
                          {Qt::DisplayRole});

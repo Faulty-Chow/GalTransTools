@@ -24,6 +24,7 @@ add_executable(trans_matcher
         main.cpp
         core/IPC.cpp
         widgets/TransMatcher.cpp
+        test/test.cpp
 )
 target_link_libraries(trans_matcher PRIVATE
         Qt6::Core
@@ -34,3 +35,5 @@ target_link_libraries(trans_matcher PRIVATE
 set_target_properties(trans_matcher PROPERTIES
         WIN32_EXECUTABLE OFF
 )
+
+add_subdirectory("test")
